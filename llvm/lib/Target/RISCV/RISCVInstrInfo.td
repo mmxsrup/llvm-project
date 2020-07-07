@@ -555,13 +555,17 @@ def SRAW  : ALUW_rr<0b0100000, 0b101, "sraw">,
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, hasNoSchedulingInfo = 1 in
 def PAC
-    : RVInstR<0b0000000, 0b000, OPC_CUSTOM0, (outs GPR:$rd),
-              (ins GPR:$rs1, GPR:$rs2), "pac", "$rd, $rs1, $rs2">;
+    : RVInstR<0b0000000, 0b000, OPC_CUSTOM0, (outs GPR:$rd, GPR:$rs1_wb),
+              (ins GPR:$rs1, GPR:$rs2), "pac", "$rd, $rs1, $rs2"> {
+    let Constraints = "$rs1 = $rs1_wb";
+}
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, hasNoSchedulingInfo = 1 in
 def AUT
     : RVInstR4<0b00, OPC_CUSTOM0, (outs GPR:$rd),
-              (ins GPR:$rs1, GPR:$rs2, GPR:$rs3), "aut", "$rd, $rs1, $rs2, $rs3">;
+              (ins GPR:$rs1, GPR:$rs2, GPR:$rs3), "aut", "$rd, $rs1, $rs2, $rs3"> {
+    let Inst{14-12} = 0b001; // func3
+}
 
 //===----------------------------------------------------------------------===//
 // Privileged instructions

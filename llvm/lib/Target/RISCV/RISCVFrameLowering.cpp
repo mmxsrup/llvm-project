@@ -133,6 +133,14 @@ bool RISCVFrameLowering::hasBP(const MachineFunction &MF) const {
   return MFI.hasVarSizedObjects() && TRI->needsStackRealignment(MF);
 }
 
+static bool ShouldSignReturnAddress(MachineFunction &MF) {
+  for (const auto &Info : MF.getFrameInfo().getCalleeSavedInfo())
+    if (Info.getReg() == RISCV::X1) // Return Address Register
+      return true;
+
+  return false;
+}
+
 // Determines the size of the frame and maximum call frame size.
 void RISCVFrameLowering::determineFrameLayout(MachineFunction &MF) const {
   MachineFrameInfo &MFI = MF.getFrameInfo();
@@ -199,6 +207,9 @@ static Register getFPReg(const RISCVSubtarget &STI) { return RISCV::X8; }
 // Returns the register used to hold the stack pointer.
 static Register getSPReg(const RISCVSubtarget &STI) { return RISCV::X2; }
 
+// Returns the register used to hold the returna address.
+static Register getRAReg(const RISCVSubtarget &STI) { return RISCV::X1; }
+
 static SmallVector<CalleeSavedInfo, 8>
 getNonLibcallCSI(const std::vector<CalleeSavedInfo> &CSI) {
   SmallVector<CalleeSavedInfo, 8> NonLibcallCSI;
@@ -221,6 +232,7 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
   Register FPReg = getFPReg(STI);
   Register SPReg = getSPReg(STI);
   Register BPReg = RISCVABI::getBPReg();
+  Register RAReg = getRAReg(STI);
 
   // Since spillCalleeSavedRegisters may have inserted a libcall, skip past
   // any instructions marked as FrameSetup
@@ -230,10 +242,6 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
   // Debug location must be unknown since the first debug location is used
   // to determine the end of the prologue.
   DebugLoc DL;
-
-  // Pointer Authentication Code
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::PAC), RISCV::X0)
-      .addReg(RISCV::X1).addReg(SPReg);
 
   // Determine the correct frame layout
   determineFrameLayout(MF);
@@ -277,6 +285,13 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
   if (STI.isRegisterReservedByUser(SPReg))
     MF.getFunction().getContext().diagnose(DiagnosticInfoUnsupported{
         MF.getFunction(), "Stack pointer required, but has been reserved."});
+
+  // Pointer Authentication Code
+  if (ShouldSignReturnAddress(MF)) {
+    Register VR = MF.getRegInfo().createVirtualRegister(&RISCV::GPRRegClass);
+    BuildMI(MBB, MBBI, DL, TII->get(RISCV::PAC), VR)
+        .addReg(RAReg).addReg(SPReg);
+  }
 
   uint64_t FirstSPAdjustAmount = getFirstSPAdjustAmount(MF);
   // Split the SP adjustment to reduce the offsets of callee saved spill.
@@ -402,6 +417,7 @@ void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
   auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
   Register FPReg = getFPReg(STI);
   Register SPReg = getSPReg(STI);
+  Register RAReg = getRAReg(STI);
 
   // Get the insert location for the epilogue. If there were no terminators in
   // the block, get the last instruction.
@@ -464,8 +480,10 @@ void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
   adjustReg(MBB, MBBI, DL, SPReg, SPReg, StackSize, MachineInstr::FrameDestroy);
 
   // Pointer Authentication Code
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::AUT), RISCV::X1)
-      .addReg(RISCV::X1).addReg(RISCV::X0).addReg(SPReg);
+  if (ShouldSignReturnAddress(MF)) {
+    BuildMI(MBB, MBBI, DL, TII->get(RISCV::AUT), RAReg)
+        .addReg(RAReg).addReg(RISCV::X0).addReg(SPReg);
+  }
 }
 
 int RISCVFrameLowering::getFrameIndexReference(const MachineFunction &MF,

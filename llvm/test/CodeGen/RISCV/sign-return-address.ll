@@ -5,8 +5,6 @@
 define i32 @leaf(i32 %x) {
 ; RV32I-LABEL: leaf:
 ; RV32I:       # %bb.0:
-; RV32I-NEXT:    pac zero, ra, sp
-; RV32I-NEXT:    aut ra, ra, zero, sp
 ; RV32I-NEXT:    ret
   ret i32 %x
 }
@@ -16,7 +14,7 @@ declare void @foo()
 define void @non_leaf() {
 ; RV32I-LABEL: non_leaf:
 ; RV32I:       # %bb.0:
-; RV32I-NEXT:    pac zero, ra, sp
+; RV32I-NEXT:    pac a0, ra, sp
 ; RV32I-NEXT:    addi sp, sp, -16
 ; RV32I-NEXT:    .cfi_def_cfa_offset 16
 ; RV32I-NEXT:    sw ra, 12(sp)
