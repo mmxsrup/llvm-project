@@ -551,6 +551,18 @@ def SRAW  : ALUW_rr<0b0100000, 0b101, "sraw">,
             Sched<[WriteIALU32, ReadIALU32, ReadIALU32]>;
 } // Predicates = [IsRV64]
 
+// Pointer Authentication
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, hasNoSchedulingInfo = 1 in
+def PAC
+    : RVInstR<0b0000000, 0b000, OPC_CUSTOM0, (outs GPR:$rd),
+              (ins GPR:$rs1, GPR:$rs2), "pac", "$rd, $rs1, $rs2">;
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, hasNoSchedulingInfo = 1 in
+def AUT
+    : RVInstR4<0b00, OPC_CUSTOM0, (outs GPR:$rd),
+              (ins GPR:$rs1, GPR:$rs2, GPR:$rs3), "aut", "$rd, $rs1, $rs2, $rs3">;
+
 //===----------------------------------------------------------------------===//
 // Privileged instructions
 //===----------------------------------------------------------------------===//

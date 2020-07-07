@@ -231,6 +231,10 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
   // to determine the end of the prologue.
   DebugLoc DL;
 
+  // Pointer Authentication Code
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::PAC), RISCV::X0)
+      .addReg(RISCV::X1).addReg(SPReg);
+
   // Determine the correct frame layout
   determineFrameLayout(MF);
 
@@ -393,6 +397,7 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
 void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
                                       MachineBasicBlock &MBB) const {
   const RISCVRegisterInfo *RI = STI.getRegisterInfo();
+  const RISCVInstrInfo *TII = STI.getInstrInfo();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
   Register FPReg = getFPReg(STI);
@@ -457,6 +462,10 @@ void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
 
   // Deallocate stack
   adjustReg(MBB, MBBI, DL, SPReg, SPReg, StackSize, MachineInstr::FrameDestroy);
+
+  // Pointer Authentication Code
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::AUT), RISCV::X1)
+      .addReg(RISCV::X1).addReg(RISCV::X0).addReg(SPReg);
 }
 
 int RISCVFrameLowering::getFrameIndexReference(const MachineFunction &MF,
