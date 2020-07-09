@@ -88,6 +88,8 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   if (TFI->hasBP(MF))
     markSuperRegs(Reserved, RISCVABI::getBPReg()); // bp
   assert(checkAllSuperRegsMarked(Reserved));
+  // Pointer Authentication
+  markSuperRegs(Reserved, RISCV::X31); // pac
   return Reserved;
 }
 

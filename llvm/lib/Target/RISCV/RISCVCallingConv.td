@@ -14,7 +14,7 @@
 // RISCVISelLowering.cpp (CC_RISCV).
 
 def CSR_ILP32_LP64
-    : CalleeSavedRegs<(add X1, X3, X4, X8, X9, (sequence "X%u", 18, 27))>;
+    : CalleeSavedRegs<(add X1, X3, X4, X8, X9, (sequence "X%u", 18, 27), X31)>;
 
 def CSR_ILP32F_LP64F
     : CalleeSavedRegs<(add CSR_ILP32_LP64,

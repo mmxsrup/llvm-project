@@ -288,8 +288,8 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
 
   // Pointer Authentication Code
   if (ShouldSignReturnAddress(MF)) {
-    Register VR = MF.getRegInfo().createVirtualRegister(&RISCV::GPRRegClass);
-    BuildMI(MBB, MBBI, DL, TII->get(RISCV::PAC), VR).addReg(RAReg, RegState::Define)
+    MBB.addLiveIn(RISCV::X31);
+    BuildMI(MBB, MBBI, DL, TII->get(RISCV::PAC), RISCV::X31).addReg(RAReg, RegState::Define)
         .addReg(RAReg).addReg(SPReg);
   }
 
@@ -482,7 +482,7 @@ void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
   // Pointer Authentication Code
   if (ShouldSignReturnAddress(MF)) {
     BuildMI(MBB, MBBI, DL, TII->get(RISCV::AUT), RAReg)
-        .addReg(RAReg).addReg(RISCV::X0).addReg(SPReg);
+        .addReg(RAReg).addReg(RISCV::X31).addReg(SPReg);
   }
 }
 

@@ -9,12 +9,12 @@ define i32 @leaf(i32 %x) {
   ret i32 %x
 }
 
-declare void @foo()
+declare i32 @foo(i32)
 
-define void @non_leaf() {
+define i32 @non_leaf(i32 %a) {
 ; RV32I-LABEL: non_leaf:
 ; RV32I:       # %bb.0:
-; RV32I-NEXT:    pac a0, ra, sp
+; RV32I-NEXT:    pac t6, ra, sp
 ; RV32I-NEXT:    addi sp, sp, -16
 ; RV32I-NEXT:    .cfi_def_cfa_offset 16
 ; RV32I-NEXT:    sw ra, 12(sp)
@@ -22,8 +22,8 @@ define void @non_leaf() {
 ; RV32I-NEXT:    call foo
 ; RV32I-NEXT:    lw ra, 12(sp)
 ; RV32I-NEXT:    addi sp, sp, 16
-; RV32I-NEXT:    aut ra, ra, zero, sp
+; RV32I-NEXT:    aut ra, ra, t6, sp
 ; RV32I-NEXT:    ret
-  call void @foo()
-  ret void
+  %1 = call i32 @foo(i32 %a)
+  ret i32 %1
 }
