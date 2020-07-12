@@ -42,6 +42,8 @@ public:
 
   bool hasBP(const MachineFunction &MF) const;
 
+  bool shouldSignReturnAddress(const MachineFunction &MF) const;
+
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
   MachineBasicBlock::iterator
   eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
@@ -72,6 +74,7 @@ private:
   void adjustReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                  const DebugLoc &DL, Register DestReg, Register SrcReg,
                  int64_t Val, MachineInstr::MIFlag Flag) const;
+  mutable Register PACReg;
 };
 }
 #endif

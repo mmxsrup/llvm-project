@@ -133,6 +133,38 @@ bool RISCVFrameLowering::hasBP(const MachineFunction &MF) const {
   return MFI.hasVarSizedObjects() && TRI->needsStackRealignment(MF);
 }
 
+bool RISCVFrameLowering::shouldSignReturnAddress(const MachineFunction &MF) const {
+  // The function should be signed in the following situations:
+  // - sign-return-address=all and RV32
+  // - sign-return-address=non-leaf and the functions spills the
+  //   X1(return address) and RV32
+  // - sign-return-address=non-leaf and
+  //   MF.getFrameInfo().isCalleeSavedInfoValid()==false and RV32
+  const Function &F = MF.getFunction();
+  if (!F.hasFnAttribute("sign-return-address"))
+    return false;
+
+  StringRef Scope = F.getFnAttribute("sign-return-address").getValueAsString();
+  if (Scope.equals("none"))
+      return false;
+
+  // Only 32bit RISCV is supported
+  auto &Subtarget = MF.getSubtarget<RISCVSubtarget>();
+  if (Subtarget.getTargetABI() != RISCVABI::ABI_ILP32)
+    llvm_unreachable("Unsupported ABI");
+
+  if (Scope.equals("all"))
+    return true;
+
+  assert(Scope.equals("non-leaf") && "Expected all, none or non-leaf");
+
+  for (const auto &Info : MF.getFrameInfo().getCalleeSavedInfo())
+    if (Info.getReg() == RISCV::X1) // Return address register
+      return true;
+
+  return false;
+}
+
 // Determines the size of the frame and maximum call frame size.
 void RISCVFrameLowering::determineFrameLayout(MachineFunction &MF) const {
   MachineFrameInfo &MFI = MF.getFrameInfo();
@@ -213,6 +245,7 @@ getNonLibcallCSI(const std::vector<CalleeSavedInfo> &CSI) {
 void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
                                       MachineBasicBlock &MBB) const {
   MachineFrameInfo &MFI = MF.getFrameInfo();
+  MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
   auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
   const RISCVRegisterInfo *RI = STI.getRegisterInfo();
   const RISCVInstrInfo *TII = STI.getInstrInfo();
@@ -263,6 +296,17 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
   // investigation. Get the number of bytes to allocate from the FrameInfo.
   uint64_t StackSize = MFI.getStackSize();
   uint64_t RealStackSize = StackSize + RVFI->getLibCallStackSize();
+
+  // Using the stack pointer as the context, generate pointer authentication
+  // code for the return address and store it to X31. We need to generate
+  // the pointer authentication code and translate the return address into
+  // an incorrect address before the return address is saved in memory.
+  if (shouldSignReturnAddress(MF)) {
+    this->PACReg = MRI.createVirtualRegister(&RISCV::GPRRegClass);
+    MBB.addLiveIn(this->PACReg);
+    BuildMI(MBB, MBBI, DL, TII->get(RISCV::PAC), this->PACReg)
+        .addReg(RISCV::X1, RegState::Define).addReg(RISCV::X1).addReg(SPReg);
+  }
 
   // Early exit if there is no need to allocate on the stack
   if (RealStackSize == 0 && !MFI.adjustsStack())
@@ -393,6 +437,7 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
 void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
                                       MachineBasicBlock &MBB) const {
   const RISCVRegisterInfo *RI = STI.getRegisterInfo();
+  const RISCVInstrInfo *TII = STI.getInstrInfo();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
   Register FPReg = getFPReg(STI);
@@ -457,6 +502,15 @@ void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
 
   // Deallocate stack
   adjustReg(MBB, MBBI, DL, SPReg, SPReg, StackSize, MachineInstr::FrameDestroy);
+
+  // Verify the value of the return address stored in X1, using the stack
+  // pointer as context and the pointer authentication code in X31. We need
+  // to verify the return address and (if successful) return it to the
+  // correct value before executing ret instruction.
+  if (shouldSignReturnAddress(MF)) {
+    BuildMI(MBB, MBBI, DL, TII->get(RISCV::AUT), RISCV::X1)
+        .addReg(RISCV::X1).addReg(this->PACReg).addReg(SPReg);
+  }
 }
 
 int RISCVFrameLowering::getFrameIndexReference(const MachineFunction &MF,
