@@ -133,6 +133,36 @@ bool RISCVFrameLowering::hasBP(const MachineFunction &MF) const {
   return MFI.hasVarSizedObjects() && TRI->needsStackRealignment(MF);
 }
 
+bool RISCVFrameLowering::shouldSignReturnAddress(const MachineFunction &MF) const {
+  // Spill the return address and sign the return address when the sign-return-address attribute is attached.
+  // Check 32bit
+  const Function &F = MF.getFunction();
+  if (!F.hasFnAttribute("sign-return-address"))
+    return false;
+
+  StringRef Scope = F.getFnAttribute("sign-return-address").getValueAsString();
+  if (Scope.equals("none"))
+      return false;
+
+  auto &Subtarget = MF.getSubtarget<RISCVSubtarget>();
+  if (Subtarget.getTargetABI() != RISCVABI::ABI_ILP32)
+    llvm_unreachable("Unsupported ABI");
+
+  if (Scope.equals("all"))
+    return true;
+
+  assert(Scope.equals("non-leaf") && "Expected all, none or non-leaf");
+
+  if (!MF.getFrameInfo().isCalleeSavedInfoValid())
+    return true;
+
+  for (const auto &Info : MF.getFrameInfo().getCalleeSavedInfo())
+    if (Info.getReg() == RISCV::X1) // Return address register
+      return true;
+
+  return false;
+}
+
 // Determines the size of the frame and maximum call frame size.
 void RISCVFrameLowering::determineFrameLayout(MachineFunction &MF) const {
   MachineFrameInfo &MFI = MF.getFrameInfo();
@@ -274,6 +304,16 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
     MF.getFunction().getContext().diagnose(DiagnosticInfoUnsupported{
         MF.getFunction(), "Stack pointer required, but has been reserved."});
 
+  // Using the stack pointer as the context, generate pointer authentication
+  // code for the return address and store it to X31. We need to generate
+  // the pointer authentication code and translate the return address into
+  // an incorrect address before the return address is saved in memory.
+  if (shouldSignReturnAddress(MF)) {
+    MBB.addLiveIn(RISCV::X31);
+    BuildMI(MBB, MBBI, DL, TII->get(RISCV::PAC), RISCV::X31)
+        .addReg(RISCV::X1, RegState::Define).addReg(RISCV::X1).addReg(SPReg);
+  }
+
   uint64_t FirstSPAdjustAmount = getFirstSPAdjustAmount(MF);
   // Split the SP adjustment to reduce the offsets of callee saved spill.
   if (FirstSPAdjustAmount) {
@@ -393,6 +433,7 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
 void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
                                       MachineBasicBlock &MBB) const {
   const RISCVRegisterInfo *RI = STI.getRegisterInfo();
+  const RISCVInstrInfo *TII = STI.getInstrInfo();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
   Register FPReg = getFPReg(STI);
@@ -457,6 +498,15 @@ void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
 
   // Deallocate stack
   adjustReg(MBB, MBBI, DL, SPReg, SPReg, StackSize, MachineInstr::FrameDestroy);
+
+  // Verify the value of the return address stored in X1, using the stack
+  // pointer as context and the pointer authentication code in X31. We need
+  // to verify the return address and (if successful) return it to the
+  // correct value before executing ret instruction.
+  if (shouldSignReturnAddress(MF)) {
+    BuildMI(MBB, MBBI, DL, TII->get(RISCV::AUT), RISCV::X1)
+        .addReg(RISCV::X1).addReg(RISCV::X31).addReg(SPReg);
+  }
 }
 
 int RISCVFrameLowering::getFrameIndexReference(const MachineFunction &MF,

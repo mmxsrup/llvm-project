@@ -42,6 +42,7 @@ RISCVRegisterInfo::RISCVRegisterInfo(unsigned HwMode)
 
 const MCPhysReg *
 RISCVRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
+  const RISCVFrameLowering *TFI = getFrameLowering(*MF);
   auto &Subtarget = MF->getSubtarget<RISCVSubtarget>();
   if (MF->getFunction().hasFnAttribute("interrupt")) {
     if (Subtarget.hasStdExtD())
@@ -50,6 +51,9 @@ RISCVRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
       return CSR_XLEN_F32_Interrupt_SaveList;
     return CSR_Interrupt_SaveList;
   }
+
+  if (TFI->shouldSignReturnAddress(*MF))
+    return CSR_ILP32_Pointer_Authentication_SaveList;
 
   switch (Subtarget.getTargetABI()) {
   default:
@@ -87,6 +91,11 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   // variable-sized objects at runtime.
   if (TFI->hasBP(MF))
     markSuperRegs(Reserved, RISCVABI::getBPReg()); // bp
+
+  // When signing the return address, we need to reserve x31 as a register
+  // to store the pointer authentication code.
+  if (TFI->shouldSignReturnAddress(MF))
+    markSuperRegs(Reserved, RISCV::X31);
   assert(checkAllSuperRegsMarked(Reserved));
   return Reserved;
 }
@@ -190,6 +199,12 @@ const uint32_t *
 RISCVRegisterInfo::getCallPreservedMask(const MachineFunction & MF,
                                         CallingConv::ID /*CC*/) const {
   auto &Subtarget = MF.getSubtarget<RISCVSubtarget>();
+  const RISCVFrameLowering *TFI = getFrameLowering(MF);
+
+  // When signing the return address, we need to reserve x31 as a register
+  // to store the pointer authentication code.
+  if (TFI->shouldSignReturnAddress(MF))
+    return CSR_ILP32_Pointer_Authentication_RegMask;
 
   switch (Subtarget.getTargetABI()) {
   default:
