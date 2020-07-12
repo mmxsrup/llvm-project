@@ -1936,6 +1936,31 @@ static bool CC_RISCV_FastCC(unsigned ValNo, MVT ValVT, MVT LocVT,
   return true; // CC didn't match.
 }
 
+static bool shouldSaveOrLoadPAC(const MachineFunction &MF, const bool IsTailCall) {
+  // The function should save/load a register to store pointer authentication code
+  // in the following situations:
+  // - sign-return-address=all      and IsTailCall==false and RV32
+  // - sign-return-address=non-leaf and IsTailCall==false and RV32
+
+  const Function &F = MF.getFunction();
+  if (!F.hasFnAttribute("sign-return-address"))
+    return false;
+
+  if (IsTailCall)
+    return false;
+
+  StringRef Scope = F.getFnAttribute("sign-return-address").getValueAsString();
+  if (Scope.equals("none"))
+      return false;
+
+  // Only 32bit RISCV is supported
+  auto &Subtarget = MF.getSubtarget<RISCVSubtarget>();
+  if (Subtarget.getTargetABI() != RISCVABI::ABI_ILP32)
+    llvm_unreachable("Unsupported ABI");
+
+  return true;
+}
+
 // Transform physical registers into virtual registers.
 SDValue RISCVTargetLowering::LowerFormalArguments(
     SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
@@ -2191,6 +2216,17 @@ SDValue RISCVTargetLowering::LowerCall(CallLoweringInfo &CLI,
     report_fatal_error("failed to perform tail call elimination on a call "
                        "site marked musttail");
 
+  // Save X31 onto the stack for RV32 pointer authentication
+  SDValue PACSpillSlot;
+  int PACFI;
+  if (shouldSaveOrLoadPAC(MF, IsTailCall)) {
+    SDValue Val = DAG.getRegister(RISCV::X31, XLenVT);
+    PACSpillSlot = DAG.CreateStackTemporary(TypeSize(4, false), Align(4));
+    PACFI = cast<FrameIndexSDNode>(PACSpillSlot)->getIndex();
+    Chain = DAG.getStore(Chain, DL, Val, PACSpillSlot,
+                         MachinePointerInfo::getFixedStack(MF, PACFI));
+  }
+
   // Get a count of how many bytes are to be pushed on the stack.
   unsigned NumBytes = ArgCCInfo.getNextStackOffset();
 
@@ -2425,6 +2461,13 @@ SDValue RISCVTargetLowering::LowerCall(CallLoweringInfo &CLI,
     RetValue = convertLocVTToValVT(DAG, RetValue, VA, DL);
 
     InVals.push_back(RetValue);
+  }
+
+  // Restore X31 for RV32 pointer authentication
+  if (shouldSaveOrLoadPAC(MF, IsTailCall)) {
+    SDValue Val = DAG.getLoad(XLenVT, DL, Chain, PACSpillSlot,
+                              MachinePointerInfo::getFixedStack(MF, PACFI));
+    Chain = DAG.getCopyToReg(Chain, DL, RISCV::X31, Val);
   }
 
   return Chain;
