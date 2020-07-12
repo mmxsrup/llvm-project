@@ -42,6 +42,8 @@ public:
 
   bool hasBP(const MachineFunction &MF) const;
 
+  bool shouldSignReturnAddress(const MachineFunction &MF) const;
+
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
   MachineBasicBlock::iterator
   eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,

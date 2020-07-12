@@ -63,3 +63,9 @@ def CSR_XLEN_F64_Interrupt: CalleeSavedRegs<(add X1,
     (sequence "F%u_D", 28, 31),
     (sequence "F%u_D", 8, 9),
     (sequence "F%u_D", 18, 27))>;
+
+// Pointer authentication code for return address is saved in X31,
+// because the pointer authentication code cannot be stored
+// in the upper bits of return address register(X1) in 32-bit RISCV.
+def CSR_ILP32_Pointer_Authentication
+    : CalleeSavedRegs<(add CSR_ILP32_LP64, X31)>;
