@@ -308,7 +308,7 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
   // the pointer authentication code and translate the return address into
   // an incorrect address before the return address is saved in memory.
   if (shouldSignReturnAddress(MF)) {
-    MBB.addLiveIn(RISCV::X31);
+    // MBB.addLiveIn(RISCV::X31);
     BuildMI(MBB, MBBI, DL, TII->get(RISCV::PAC), RISCV::X31)
         .addReg(RISCV::X1, RegState::Define).addReg(RISCV::X1).addReg(SPReg);
   }
@@ -619,10 +619,10 @@ void RISCVFrameLowering::determineCalleeSaves(MachineFunction &MF,
     }
   }
 
-  // Mark X31 as used if function signs return address
-  if (shouldSignReturnAddress(MF)) {
-    SavedRegs.set(RISCV::X31);
-  }
+  // // Mark X31 as used if function signs return address
+  // if (shouldSignReturnAddress(MF)) {
+  //   SavedRegs.set(RISCV::X31);
+  // }
 }
 
 void RISCVFrameLowering::processFunctionBeforeFrameFinalized(
