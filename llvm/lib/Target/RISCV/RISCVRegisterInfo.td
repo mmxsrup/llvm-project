@@ -233,3 +233,11 @@ def FPR64C : RegisterClass<"RISCV", [f64], 64, (add
   (sequence "F%u_D", 10, 15),
   (sequence "F%u_D", 8, 9)
 )>;
+
+def RegPAC : RegisterClass<"RISCV", [XLenVT], 32, (add
+    (sequence "X%u", 18, 27)
+  )> {
+  let RegInfos = RegInfoByHwMode<
+      [RV32,              RV64,              DefaultMode],
+      [RegInfo<32,32,32>, RegInfo<64,64,64>, RegInfo<32,32,32>]>;
+}

@@ -302,7 +302,7 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
   // the pointer authentication code and translate the return address into
   // an incorrect address before the return address is saved in memory.
   if (shouldSignReturnAddress(MF)) {
-    this->PACReg = MRI.createVirtualRegister(&RISCV::GPRRegClass);
+    this->PACReg = MRI.createVirtualRegister(&RISCV::RegPACRegClass);
     // MBB.addLiveIn(this->PACReg);
     BuildMI(MBB, MBBI, DL, TII->get(RISCV::PAC), this->PACReg)
         .addReg(RISCV::X1, RegState::Define).addReg(RISCV::X1).addReg(SPReg);
@@ -629,6 +629,14 @@ void RISCVFrameLowering::processFunctionBeforeFrameFinalized(
   if (!isInt<11>(MFI.estimateStackSize(MF))) {
     int RegScavFI = MFI.CreateStackObject(
         RegInfo->getSpillSize(*RC), RegInfo->getSpillAlignment(*RC), false);
+    RS->addScavengingFrameIndex(RegScavFI);
+  }
+
+  // Create stack object to spill the register for pointer authentication
+  if (shouldSignReturnAddress(MF)) {
+    const TargetRegisterClass *PACRC = &RISCV::RegPACRegClass;
+    int RegScavFI = MFI.CreateSpillStackObject(
+        RegInfo->getSpillSize(*PACRC), RegInfo->getSpillAlignment(*PACRC));
     RS->addScavengingFrameIndex(RegScavFI);
   }
 }
