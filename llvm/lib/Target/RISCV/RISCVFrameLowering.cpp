@@ -303,7 +303,7 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
   // an incorrect address before the return address is saved in memory.
   if (shouldSignReturnAddress(MF)) {
     this->PACReg = MRI.createVirtualRegister(&RISCV::GPRRegClass);
-    MBB.addLiveIn(this->PACReg);
+    // MBB.addLiveIn(this->PACReg);
     BuildMI(MBB, MBBI, DL, TII->get(RISCV::PAC), this->PACReg)
         .addReg(RISCV::X1, RegState::Define).addReg(RISCV::X1).addReg(SPReg);
   }
